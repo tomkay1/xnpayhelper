@@ -1,27 +1,123 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
+apply plugin: 'com.android.application'
 
-buildscript {
-    
-    repositories {
-        google()
-        jcenter()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:4.0.1'
-        
 
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
+android {
+    compileSdkVersion 28
+    defaultConfig {
+        applicationId "com.arya1021.alipay"
+        minSdkVersion 21
+        targetSdkVersion 28
+        versionCode 2
+        versionName "2.5.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+
+        sourceSets.main {
+            jni.srcDirs = []
+        }
+
     }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            zipAlignEnabled true  //压缩优化
+            shrinkResources false  //移出无用资源
+            //前一部分代表系统默认的android程序的混淆文件，该文件已经包含了基本的混淆声明，后一个文件是自己的定义混淆文件
+            //proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            buildConfigField "boolean", "LOG_DEBUG", "false" //不显示log
+
+        }
+        debug {
+            minifyEnabled false
+        }
+        lintOptions {
+            checkReleaseBuilds false
+            abortOnError false //执行lint检查，有任何的错误或者警告提示，都会终止构建，我们可以将其关掉。
+        }
+    }
+
+    applicationVariants.all {
+        //判断是release还是debug版本
+        def buildType = it.buildType.name
+        def fileName
+        //下面的channel是获取渠道号，你获取渠道号不一定会和我的代码一样，因为有可能你的渠道名称的规则和我的不一样，我的规则是${渠道名}-${applicationId},所以我是这样取的。
+        //def channel = it.productFlavors[0].name.split("-")[0]
+        //获取当前时间的"YYYY-MM-dd"格式。
+        def createTime = new Date().format("YYYY-MM-dd", TimeZone.getTimeZone("GMT+08:00"))
+        //只对Release包起作用，如果不是Release包则不变更输出路径，否则可能导致AS无法自动安装debug包。
+        /*if (buildType == "release") {
+            it.getPackageApplication().outputDirectory = new File(project.rootDir.absolutePath + "/apks/${it.productFlavors[0].applicationId}/${createTime}")
+        }*/
+        it.outputs.each {
+            //只对Release包起作用，如果不是Release包则不变更名称。
+            if (buildType == "release") {
+                //我此处的命名规则是：渠道名_项目名_版本名_创建时间_构建类型.apk
+                fileName = "zfbpay_v${defaultConfig.versionName}_${defaultConfig.versionCode}_${createTime}-${buildType}.apk"
+                //将名字打印出来，以便及时查看是否满意。
+                println "文件名：-----------------${fileName}"
+                //重新对apk命名。(适用于Gradle4.0以下版本)
+                //it.outputFile = new File(it.outputFile.parent, fileName)
+                //重新对apk命名。(适用于Gradle4.0（含）以上版本)如果你Gradle版本是4.0以下版本则将上面的一行代码放开并注释下面的这一行。
+                it.outputFileName = fileName
+            }
+        }
+    }
+
 }
 
-allprojects {
-    repositories {
-        google()
-        jcenter()
-    }
+dependencies {
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.android.support.constraint:constraint-layout:1.1.3'
+    implementation 'com.android.support:design:28.0.0'
+    implementation 'com.android.support:support-v4:28.0.0'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'com.android.support.test:runner:1.0.2'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.2'
+
+    implementation files('libs/jsoup-1.11.3.jar')
+    implementation files('libs/XposedBridgeAPI-89.jar')
+    //仅仅使用HttpURLConnection作为网络层
+    implementation 'com.yolanda.nohttp:nohttp:1.1.0'
+    //使用OkHttp作为网络层
+    implementation 'com.yanzhenjie.nohttp:okhttp:1.1.0'
+    implementation 'com.google.code.gson:gson:2.2.4'
+
+    implementation 'com.google.zxing:core:3.2.1'
+
+    implementation files('libs/Msc.jar')
+    implementation files('libs/Sunflower.jar')
+//    implementation files('libs/commons-codec-1.11.jar')
+
+    implementation 'com.alibaba:fastjson:1.2.55'
+
+    implementation 'com.android.volley:volley:1.1.1'
+
+    implementation 'org.greenrobot:eventbus:3.0.0'
+
+    implementation 'org.java-websocket:Java-WebSocket:1.3.9'
+
+
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
+afterEvaluate {
+    installDebug.doLast {
+        updateVirtualXposedAPP.execute()
+        rebootVirtualXposedAPP.execute()
+        launchVirtualXposedAPP.execute()
+    }
+}
+// 更新 VXP 中的 app
+task updateVirtualXposedAPP(type: Exec) {
+    def pkg = android.defaultConfig.applicationId
+    commandLine android.adbExecutable, 'shell', 'am', 'broadcast', '-a', 'io.va.exposed.CMD', '-e', 'cmd', 'update', '-e', 'pkg', pkg
+}
+// 重启 VXP
+task rebootVirtualXposedAPP(type: Exec) {
+    commandLine android.adbExecutable, 'shell', 'am', 'broadcast', '-a', 'io.va.exposed.CMD', '-e', 'cmd', 'reboot'
+}
+
+// 重启 VXP 需要 hook 的 APP，需要知道它的包名
+task launchVirtualXposedAPP(type: Exec) {
+    def pkg = 'com.arya1021.alipay'// 需要 hook 的 app，这里是微信
+    commandLine android.adbExecutable, 'shell', 'am', 'broadcast', '-a', 'io.va.exposed.CMD', '-e', 'cmd', 'launch', '-e', 'pkg', pkg
 }
